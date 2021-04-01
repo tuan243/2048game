@@ -29,9 +29,13 @@ export default class GridManager extends cc.Component {
 
   private _table: number[][] = [];
 
+  private _animTable: number[][] = [];
+
   private _tileInitVal: number = 2;
 
-  private _gridTileLabel = [];
+  private _gridTile: cc.Node[] = [];
+
+  private _canSwipe = true;
 
   private addRandomTile(): void {
     let blankIndices = [];
@@ -49,160 +53,173 @@ export default class GridManager extends cc.Component {
     let colIndex = randIndex % this.tableSize;
 
     this._table[rowIndex][colIndex] = this._tileInitVal;
+    // let button = this._gridTile[randIndex];
+    // button.children[0].children[0].getComponent(cc.Label).string = <string>(
+    //   (<any>this._tileInitVal)
+    // );
+    // button.children[0].active = true;
+    // this.updateGridTile();
   }
 
   private moveGrid(dir: SwipeDirection) {
+    this._animTable = this._animTable.map((row) => row.map(() => 0));
+
     let prevGrid = [];
     for (let i = 0; i < this.tableSize; i++) {
       prevGrid.push(this._table[i].slice());
     }
 
-    switch (dir) {
-      case SwipeDirection.Right: {
-        for (let k = 0; k < this.tableSize; k++) {
-          let valCells = this._table[k].filter((val) => val != 0);
+    for (let k = 0; k < this.tableSize; k++) {
+      let row = [];
 
-          let i = valCells.length - 1;
-          while (i > 0) {
-            if (valCells[i] === valCells[i - 1]) {
-              valCells[i] += valCells[i - 1];
-              valCells.splice(i - 1, 1);
-              i -= 2;
-            } else {
-              i--;
-            }
-          }
-          while (valCells.length < this.tableSize) {
-            valCells.unshift(0);
-          }
-
-          this._table[k] = valCells;
+      if (dir === SwipeDirection.Left || dir === SwipeDirection.Right) {
+        row = this._table[k];
+      } else {
+        for (let j = 0; j < this.tableSize; j++) {
+          row.push(this._table[j][k]);
         }
-
-        console.log('swipe right', this._table);
-
-        break;
-      }
-      case SwipeDirection.Left: {
-        for (let k = 0; k < this.tableSize; k++) {
-          let valCells = this._table[k].filter((val) => val != 0);
-
-          let i = 0;
-          while (i < valCells.length - 1) {
-            if (valCells[i] === valCells[i + 1]) {
-              valCells[i] += valCells[i + 1];
-              valCells.splice(i + 1, 1);
-              i += 2;
-            } else {
-              i++;
-            }
-          }
-
-          while (valCells.length < this.tableSize) {
-            valCells.push(0);
-          }
-
-          this._table[k] = valCells;
-        }
-
-        console.log('swipe left', this._table);
-
-        break;
       }
 
-      case SwipeDirection.Down: {
-        for (let i = 0; i < this.tableSize; i++) {
-          let colCells = [];
+      if (dir === SwipeDirection.Left || dir === SwipeDirection.Up) {
+        row.reverse();
+      }
+      const step = [];
 
-          for (let j = 0; j < this.tableSize; j++) {
-            colCells.push(this._table[j][i]);
-          }
+      for (let i = 0; i < row.length; i++) {
+        step.push(0);
+      }
+      let idx = row.length - 1;
 
-          let valCells = colCells.filter((val) => val != 0);
+      while (idx >= 0) {
+        if (row[idx] === 0) {
+          let j = idx - 1;
+          while (j >= 0) {
+            if (row[j] !== 0) {
+              step[j] = idx - j;
+              row[idx] = row[j];
+              row[j] = 0;
 
-          let k = valCells.length - 1;
-          while (k > 0) {
-            if (valCells[k] === valCells[k - 1]) {
-              valCells[k] += valCells[k - 1];
-              valCells.splice(k - 1, 1);
-              k -= 2;
-            } else {
-              k--;
+              if (
+                idx < row.length - 1 &&
+                (row[idx + 1] === row[idx] || row[idx + 1] === 0)
+              ) {
+                row[idx + 1] += row[idx];
+                row[idx] = 0;
+                step[j]++;
+              }
+
+              break;
             }
+            j--;
           }
-          while (valCells.length < this.tableSize) {
-            valCells.unshift(0);
-          }
-
-          for (let j = 0; j < this.tableSize; j++) {
-            this._table[j][i] = valCells[j];
-          }
+        } else if (
+          idx < row.length - 1 &&
+          (row[idx + 1] === row[idx] || row[idx + 1] === 0)
+        ) {
+          row[idx + 1] += row[idx];
+          row[idx] = 0;
+          step[idx]++;
         }
 
-        console.log('swipe down', this._table);
-
-        break;
+        idx--;
       }
 
-      case SwipeDirection.Up: {
-        for (let i = 0; i < this.tableSize; i++) {
-          let colCells = [];
+      if (dir === SwipeDirection.Left || dir === SwipeDirection.Up) {
+        row.reverse();
+        step.reverse();
+      }
 
-          for (let j = 0; j < this.tableSize; j++) {
-            colCells.push(this._table[j][i]);
-          }
-
-          let valCells = colCells.filter((val) => val != 0);
-
-          let k = 0;
-          while (k < valCells.length - 1) {
-            if (valCells[k] === valCells[k + 1]) {
-              valCells[k] += valCells[k + 1];
-              valCells.splice(k + 1, 1);
-              k += 2;
-            } else {
-              k++;
-            }
-          }
-          while (valCells.length < this.tableSize) {
-            valCells.push(0);
-          }
-
-          for (let j = 0; j < this.tableSize; j++) {
-            this._table[j][i] = valCells[j];
-          }
+      if (dir === SwipeDirection.Left || dir === SwipeDirection.Right) {
+        this._animTable[k] = step;
+        this._table[k] = row;
+      } else {
+        for (let i = 0; i < row.length; i++) {
+          this._table[i][k] = row[i];
+          this._animTable[i][k] = step[i];
         }
-
-        console.log('swipe up', this._table);
-
-        break;
       }
     }
 
-    let isValid = false;
+    let tweens: cc.Tween[] = [];
     for (let i = 0; i < this.tableSize; i++) {
       for (let j = 0; j < this.tableSize; j++) {
-        if (prevGrid[i][j] != this._table[i][j]) {
-          isValid = true;
-          break;
+        const step = this._animTable[i][j];
+        if (step === 0) {
+          continue;
         }
+        let idx = i * this.tableSize + j;
+        let x = 0,
+          y = 0;
+        switch (dir) {
+          case SwipeDirection.Right:
+            x = step;
+            break;
+          case SwipeDirection.Left:
+            x = -step;
+            break;
+          case SwipeDirection.Up:
+            y = step;
+            break;
+          case SwipeDirection.Down:
+            y = -step;
+            break;
+        }
+
+        let spacing = 8;
+        let btnBackground = this._gridTile[idx].children[0];
+        tweens.push(
+          cc
+            .tween(btnBackground)
+            .to(0.2, {
+              position: cc.v3(
+                x * (spacing + this._gridTile[idx].width),
+                y * (spacing + this._gridTile[idx].height),
+                0
+              ),
+            })
+            .call(() => {
+              btnBackground.active = false;
+              btnBackground.position = cc.Vec3.ZERO;
+            })
+        );
       }
     }
 
-    if (isValid) {
-      console.log('is valid!');
-      this.addRandomTile();
-      this.updateGridTile();
+    for (let i = 0; i < tweens.length; i++) {
+      if (i === tweens.length - 1) {
+        tweens[i].call(() => {
+          let isValid = false;
+          for (let i = 0; i < this.tableSize; i++) {
+            for (let j = 0; j < this.tableSize; j++) {
+              if (prevGrid[i][j] != this._table[i][j]) {
+                isValid = true;
+                break;
+              }
+            }
+          }
+          if (isValid) {
+            console.log('is valid!');
+            this.addRandomTile();
+            this.updateGridTile();
+          }
+        });
+      }
+      tweens[i].start();
     }
-
-    // console.log('isvalid', isValid);
   }
 
   private updateGridTile() {
     for (let i = 0; i < this.tableSize; i++) {
       for (let j = 0; j < this.tableSize; j++) {
         let index = i * this.tableSize + j;
-        this._gridTileLabel[index].string = this._table[i][j];
+        if (this._table[i][j] != 0) {
+          this._gridTile[index].children[0].children[0].getComponent(
+            cc.Label
+          ).string = <string>(<any>this._table[i][j]);
+          this._gridTile[index].children[0].active = true;
+        } else {
+          this._gridTile[index].children[0].active = false;
+        }
       }
     }
   }
@@ -213,18 +230,18 @@ export default class GridManager extends cc.Component {
       row.children.forEach((button) => {
         button.children[0].children[0].getComponent(cc.Label).string = '';
         button.children[0].children[0].getComponent(cc.Label).fontSize = 48;
-        this._gridTileLabel.push(
-          button.children[0].children[0].getComponent(cc.Label)
-        );
+        button.children[0].active = false;
+
+        this._gridTile.push(button);
       });
     });
 
-    console.log('gridtilelabel', this._gridTileLabel);
-
     for (let i = 0; i < this.tableSize; i++) {
       this._table.push([]);
+      this._animTable.push([]);
       for (let j = 0; j < this.tableSize; j++) {
         this._table[i].push(0);
+        this._animTable[i].push(0);
       }
     }
 
@@ -236,7 +253,7 @@ export default class GridManager extends cc.Component {
     });
 
     this.node.on(cc.Node.EventType.TOUCH_MOVE, (event) => {
-      if (this._isSwipeEnd || !this._startLocation) {
+      if (this._isSwipeEnd || !this._startLocation || this._canSwipe == false) {
         return;
       }
 
@@ -284,6 +301,11 @@ export default class GridManager extends cc.Component {
     // console.log('reset game');
     this._table = this._table.map((row) => row.map(() => 0));
     this.addRandomTile();
+    this.updateGridTile();
+
+    // cc.tween(this._gridTile[2].children[0])
+    //   .to(1, { position: cc.v3(200, 300) })
+    //   .start();
   }
 
   // update (dt) {}
