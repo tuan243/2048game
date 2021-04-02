@@ -23,6 +23,9 @@ export default class GridManager extends cc.Component {
   @property
   public tableSize: number = 4;
 
+  @property(cc.Node)
+  public testNode: cc.Node = null;
+
   private _startLocation: cc.Vec2 = null;
   private _swipeThres: number = 20;
   private _isSwipeEnd: boolean = true;
@@ -33,9 +36,23 @@ export default class GridManager extends cc.Component {
 
   private _tileInitVal: number = 2;
 
-  private _gridTile: cc.Node[] = [];
+  private _tiles: cc.Node[] = [];
 
   private _canSwipe = true;
+
+  private _tileColors: cc.Color[] = [
+    cc.color(238, 228, 218),
+    cc.color(237, 224, 200),
+    cc.color(242, 177, 121),
+    cc.color(245, 149, 99),
+    cc.color(246, 124, 96),
+    cc.color(246, 94, 59),
+    cc.color(237, 207, 115),
+    cc.color(237, 204, 98),
+    cc.color(237, 200, 80),
+    cc.color(237, 197, 63),
+    cc.color(237, 294, 45),
+  ];
 
   private addRandomTile(): void {
     let blankIndices = [];
@@ -49,24 +66,29 @@ export default class GridManager extends cc.Component {
 
     let randIndex =
       blankIndices[Math.floor(Math.random() * blankIndices.length)];
+
+    if (!randIndex) {
+      return;
+    }
     let rowIndex = Math.floor(randIndex / this.tableSize);
     let colIndex = randIndex % this.tableSize;
 
     this._table[rowIndex][colIndex] = this._tileInitVal;
-    // let button = this._gridTile[randIndex];
-    // button.children[0].children[0].getComponent(cc.Label).string = <string>(
-    //   (<any>this._tileInitVal)
-    // );
-    // button.children[0].active = true;
-    // this.updateGridTile();
+
+    let tile = this._tiles[randIndex];
+    tile.scale = 0;
+    cc.tween(tile).to(0.1, { scale: 1 }).start();
   }
 
   private moveGrid(dir: SwipeDirection) {
     this._animTable = this._animTable.map((row) => row.map(() => 0));
 
-    let prevGrid = [];
+    let mergeTable = [];
     for (let i = 0; i < this.tableSize; i++) {
-      prevGrid.push(this._table[i].slice());
+      mergeTable.push([]);
+      for (let j = 0; j < this.tableSize; j++) {
+        mergeTable[i].push(0);
+      }
     }
 
     for (let k = 0; k < this.tableSize; k++) {
@@ -84,47 +106,51 @@ export default class GridManager extends cc.Component {
         row.reverse();
       }
       const step = [];
+      const merge = [];
 
       for (let i = 0; i < row.length; i++) {
         step.push(0);
+        merge.push(0);
       }
-      let idx = row.length - 1;
+      let i = row.length - 1;
 
-      while (idx >= 0) {
-        if (row[idx] === 0) {
-          let j = idx - 1;
-          while (j >= 0) {
-            if (row[j] !== 0) {
-              step[j] = idx - j;
-              row[idx] = row[j];
-              row[j] = 0;
-
-              if (
-                idx < row.length - 1 &&
-                (row[idx + 1] === row[idx] || row[idx + 1] === 0)
-              ) {
-                row[idx + 1] += row[idx];
-                row[idx] = 0;
-                step[j]++;
-              }
-
-              break;
-            }
-            j--;
+      while (i >= 0) {
+        let j = i - 1;
+        while (j >= -1) {
+          if (j == -1) {
+            i = -1;
+            break;
           }
-        } else if (
-          idx < row.length - 1 &&
-          (row[idx + 1] === row[idx] || row[idx + 1] === 0)
-        ) {
-          row[idx + 1] += row[idx];
-          row[idx] = 0;
-          step[idx]++;
-        }
+          if (row[j] === 0) {
+            j--;
+            continue;
+          }
 
-        idx--;
+          if (row[i] !== 0) {
+            if (row[j] === row[i]) {
+              row[i] += row[j];
+              row[j] = 0;
+              step[j] = i - j;
+              merge[i] = 1;
+            } else if (i - 1 != j) {
+              row[i - 1] = row[j];
+              row[j] = 0;
+              step[j] = i - j - 1;
+            }
+
+            i--;
+          } else {
+            row[i] += row[j];
+            row[j] = 0;
+            step[j] = i - j;
+          }
+
+          break;
+        }
       }
 
       if (dir === SwipeDirection.Left || dir === SwipeDirection.Up) {
+        merge.reverse();
         row.reverse();
         step.reverse();
       }
@@ -132,13 +158,17 @@ export default class GridManager extends cc.Component {
       if (dir === SwipeDirection.Left || dir === SwipeDirection.Right) {
         this._animTable[k] = step;
         this._table[k] = row;
+        mergeTable[k] = merge;
       } else {
         for (let i = 0; i < row.length; i++) {
           this._table[i][k] = row[i];
           this._animTable[i][k] = step[i];
+          mergeTable[i][k] = merge[i];
         }
       }
     }
+
+    console.log('mergetable', mergeTable);
 
     let tweens: cc.Tween[] = [];
     for (let i = 0; i < this.tableSize; i++) {
@@ -147,6 +177,7 @@ export default class GridManager extends cc.Component {
         if (step === 0) {
           continue;
         }
+
         let idx = i * this.tableSize + j;
         let x = 0,
           y = 0;
@@ -166,20 +197,35 @@ export default class GridManager extends cc.Component {
         }
 
         let spacing = 8;
-        let btnBackground = this._gridTile[idx].children[0];
+        let tile = this._tiles[idx];
+        let pos = tile.position;
+        let zIdx = tile.zIndex;
+
+        console.log('zindex 0', tile.zIndex);
+
+        tile.zIndex = -Math.abs(step);
+
+        this._canSwipe = false;
         tweens.push(
           cc
-            .tween(btnBackground)
+            .tween(tile)
             .to(0.2, {
               position: cc.v3(
-                x * (spacing + this._gridTile[idx].width),
-                y * (spacing + this._gridTile[idx].height),
+                tile.x + x * (spacing + this._tiles[idx].width),
+                tile.y + y * (spacing + this._tiles[idx].height),
                 0
               ),
             })
             .call(() => {
-              btnBackground.active = false;
-              btnBackground.position = cc.Vec3.ZERO;
+              tile.active = false;
+              tile.position = pos;
+              tile.zIndex = zIdx;
+
+              // let destineTile = this._tiles[(i + y) * this.tableSize + j + x];
+              // cc.tween(destineTile)
+              //   .to(0.1, { scale: 1.1 })
+              //   .to(0.1, { scale: 1.0 })
+              //   .start();
             })
         );
       }
@@ -188,20 +234,42 @@ export default class GridManager extends cc.Component {
     for (let i = 0; i < tweens.length; i++) {
       if (i === tweens.length - 1) {
         tweens[i].call(() => {
-          let isValid = false;
           for (let i = 0; i < this.tableSize; i++) {
             for (let j = 0; j < this.tableSize; j++) {
-              if (prevGrid[i][j] != this._table[i][j]) {
-                isValid = true;
-                break;
+              if (mergeTable[i][j] === 1) {
+                let tile = this._tiles[i * this.tableSize + j];
+                let colorIdx = Math.min(
+                  Math.round(Math.log2(this._table[i][j])) - 1,
+                  this._tileColors.length - 1
+                );
+
+                console.log('color index bla', this._tileColors[colorIdx]);
+                // this._tiles[index].children[0].color = this._tileColors[coloIdx];
+                cc.tween(tile)
+                  .parallel(
+                    cc
+                      .tween()
+                      .to(0.05, { scale: 1.2 })
+                      .to(0.05, { scale: 1.0 }),
+                    cc.tween().to(0.5, { color: this._tileColors[colorIdx] })
+                  )
+                  // .to(0.05, { scale: 1.2 })
+                  // .to(0.05, { scale: 1.0 })
+                  // .to(0.1, { color: this._tileColors[colorIdx] })
+                  .start();
               }
             }
           }
-          if (isValid) {
-            console.log('is valid!');
-            this.addRandomTile();
-            this.updateGridTile();
-          }
+
+          this.addRandomTile();
+          this.updateGridTile();
+
+          this.scheduleOnce(() => {
+            this._canSwipe = true;
+            if (!this.validMoves()) {
+              console.log('thua roi');
+            }
+          }, 0.1);
         });
       }
       tweens[i].start();
@@ -213,27 +281,57 @@ export default class GridManager extends cc.Component {
       for (let j = 0; j < this.tableSize; j++) {
         let index = i * this.tableSize + j;
         if (this._table[i][j] != 0) {
-          this._gridTile[index].children[0].children[0].getComponent(
+          this._tiles[index].children[0].children[0].getComponent(
             cc.Label
           ).string = <string>(<any>this._table[i][j]);
-          this._gridTile[index].children[0].active = true;
+
+          // let coloIdx = Math.min(
+          //   Math.round(Math.log2(this._table[i][j])) - 1,
+          //   this._tileColors.length - 1
+          // );
+
+          // console.log('color index', this._tileColors[coloIdx]);
+          // this._tiles[index].children[0].color = this._tileColors[coloIdx];
+
+          this._tiles[index].active = true;
         } else {
-          this._gridTile[index].children[0].active = false;
+          this._tiles[index].active = false;
         }
       }
     }
   }
 
+  private validMoves(): boolean {
+    for (let i = 0; i < this._table.length; i++) {
+      for (let j = 0; j < this._table.length; j++) {
+        if (this._table[i][j] === 0) {
+          return true;
+        }
+      }
+    }
+
+    for (let i = 0; i < this._table.length; i++) {
+      for (let j = 0; j < this._table.length - 1; j++) {
+        if (this._table[i][j] === this._table[i][j + 1]) {
+          return true;
+        }
+        if (this._table[j][i] === this._table[j + 1][i]) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   // LIFE-CYCLE CALLBACKS:
   onLoad() {
-    this.node.children.forEach((row) => {
-      row.children.forEach((button) => {
-        button.children[0].children[0].getComponent(cc.Label).string = '';
-        button.children[0].children[0].getComponent(cc.Label).fontSize = 48;
-        button.children[0].active = false;
-
-        this._gridTile.push(button);
-      });
+    let i = 1;
+    this.node.children.forEach((tile) => {
+      // tile.children[0].children[0].getComponent(cc.Label).fontSize = 64;
+      tile.active = false;
+      this._tiles.push(tile);
+      i++;
     });
 
     for (let i = 0; i < this.tableSize; i++) {
@@ -298,13 +396,11 @@ export default class GridManager extends cc.Component {
   }
 
   public resetGame() {
-    // console.log('reset game');
-    this._table = this._table.map((row) => row.map(() => 0));
-    this.addRandomTile();
-    this.updateGridTile();
-
-    // cc.tween(this._gridTile[2].children[0])
-    //   .to(1, { position: cc.v3(200, 300) })
+    // this._table = this._table.map((row) => row.map(() => 0));
+    // this.addRandomTile();
+    // this.updateGridTile();
+    // cc.tween(this._tiles[2])
+    //   .to(1, { position: cc.v3(100, 100) })
     //   .start();
   }
 
