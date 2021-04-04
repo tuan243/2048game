@@ -15,16 +15,21 @@ enum SwipeDirection {
 
 @ccclass
 export default class GridManager extends cc.Component {
-  // @property(cc.Label)
-  // label: cc.Label = null;
-
-  // @property
-  // text: string = 'hello';
   @property
   public tableSize: number = 4;
 
   @property(cc.Node)
   public testNode: cc.Node = null;
+
+  @property(cc.Label)
+  public scoreLabel: cc.Label = null;
+  @property(cc.Label)
+  public bestLabel: cc.Label = null;
+  @property(cc.Node)
+  public loseScreen: cc.Node = null;
+
+  private _score : number = 0;
+  private _best : number = 0;
 
   private _startLocation: cc.Vec2 = null;
   private _swipeThres: number = 20;
@@ -132,6 +137,9 @@ export default class GridManager extends cc.Component {
               row[j] = 0;
               step[j] = i - j;
               merge[i] = 1;
+
+              this._score += row[i];
+        
             } else if (i - 1 != j) {
               row[i - 1] = row[j];
               row[j] = 0;
@@ -168,7 +176,15 @@ export default class GridManager extends cc.Component {
       }
     }
 
-    console.log('mergetable', mergeTable);
+    this.scoreLabel.string = this._score.toString();
+    if (this._score > this._best) {
+      this._best = this._score;
+      this.bestLabel.string = this._best.toString();
+
+      window.localStorage.setItem('best', this._best.toString());
+    }
+
+    // console.log('mergetable', mergeTable);
 
     let tweens: cc.Tween[] = [];
     for (let i = 0; i < this.tableSize; i++) {
@@ -201,8 +217,6 @@ export default class GridManager extends cc.Component {
         let pos = tile.position;
         let zIdx = tile.zIndex;
 
-        console.log('zindex 0', tile.zIndex);
-
         tile.zIndex = -Math.abs(step);
 
         this._canSwipe = false;
@@ -220,12 +234,6 @@ export default class GridManager extends cc.Component {
               tile.active = false;
               tile.position = pos;
               tile.zIndex = zIdx;
-
-              // let destineTile = this._tiles[(i + y) * this.tableSize + j + x];
-              // cc.tween(destineTile)
-              //   .to(0.1, { scale: 1.1 })
-              //   .to(0.1, { scale: 1.0 })
-              //   .start();
             })
         );
       }
@@ -243,31 +251,40 @@ export default class GridManager extends cc.Component {
                   this._tileColors.length - 1
                 );
 
-                console.log('color index bla', this._tileColors[colorIdx]);
-                // this._tiles[index].children[0].color = this._tileColors[coloIdx];
-                cc.tween(tile)
-                  .parallel(
-                    cc
-                      .tween()
-                      .to(0.05, { scale: 1.2 })
-                      .to(0.05, { scale: 1.0 }),
-                    cc.tween().to(0.5, { color: this._tileColors[colorIdx] })
+                let labelColor : cc.Color;
+                if (colorIdx > 1) {
+                  labelColor = new cc.Color(249, 246, 242);
+                }
+                else {
+                  labelColor = new cc.Color(119, 110, 101);
+                }
+
+                cc.tween(tile.children[0]).parallel(
+                  cc.tween()
+                    .to(0.05, { scale: 1.2 })
+                    .to(0.05, { scale: 1.0 }), 
+                  cc.tween().to(0.1, { color: this._tileColors[colorIdx] }),
+                  
                   )
-                  // .to(0.05, { scale: 1.2 })
-                  // .to(0.05, { scale: 1.0 })
-                  // .to(0.1, { color: this._tileColors[colorIdx] })
                   .start();
+                cc.tween(tile.children[0].children[0]).to(0.1, {color: labelColor})
+                  .start();
+
+                this.updateView();
               }
             }
           }
 
           this.addRandomTile();
-          this.updateGridTile();
+          this.updateView();
 
           this.scheduleOnce(() => {
             this._canSwipe = true;
             if (!this.validMoves()) {
               console.log('thua roi');
+              this.loseScreen.opacity = 0;
+              this.loseScreen.active = true;
+              cc.tween(this.loseScreen).to(0.5, {opacity : 255}).start();
             }
           }, 0.1);
         });
@@ -276,7 +293,7 @@ export default class GridManager extends cc.Component {
     }
   }
 
-  private updateGridTile() {
+  private updateView() {
     for (let i = 0; i < this.tableSize; i++) {
       for (let j = 0; j < this.tableSize; j++) {
         let index = i * this.tableSize + j;
@@ -285,13 +302,21 @@ export default class GridManager extends cc.Component {
             cc.Label
           ).string = <string>(<any>this._table[i][j]);
 
-          // let coloIdx = Math.min(
-          //   Math.round(Math.log2(this._table[i][j])) - 1,
-          //   this._tileColors.length - 1
-          // );
+          let colorIdx = Math.min(
+            Math.round(Math.log2(this._table[i][j])) - 1,
+            this._tileColors.length - 1
+          );
 
-          // console.log('color index', this._tileColors[coloIdx]);
-          // this._tiles[index].children[0].color = this._tileColors[coloIdx];
+          let labelColor : cc.Color;
+          if (colorIdx > 1) {
+            labelColor = new cc.Color(249, 246, 242);
+          }
+          else {
+            labelColor = new cc.Color(119, 110, 101);
+          }
+
+          this._tiles[index].children[0].color = this._tileColors[colorIdx];
+          this._tiles[index].children[0].children[0].color = labelColor;
 
           this._tiles[index].active = true;
         } else {
@@ -326,12 +351,18 @@ export default class GridManager extends cc.Component {
 
   // LIFE-CYCLE CALLBACKS:
   onLoad() {
-    let i = 1;
+    this.loseScreen.active = false;
+
+    let bestScore = window.localStorage.getItem('best');
+    if (bestScore) {
+      this._best = <number> <any> bestScore;
+      this.bestLabel.string = bestScore;
+    } 
+
     this.node.children.forEach((tile) => {
-      // tile.children[0].children[0].getComponent(cc.Label).fontSize = 64;
       tile.active = false;
+      tile.children[0].children[0].color = new cc.Color(119, 110, 101);
       this._tiles.push(tile);
-      i++;
     });
 
     for (let i = 0; i < this.tableSize; i++) {
@@ -342,8 +373,6 @@ export default class GridManager extends cc.Component {
         this._animTable[i].push(0);
       }
     }
-
-    console.log('table', this._table);
 
     this.node.on(cc.Node.EventType.TOUCH_START, (event) => {
       this._startLocation = event.getStartLocation();
@@ -392,17 +421,57 @@ export default class GridManager extends cc.Component {
   start() {
     this.addRandomTile();
     this.addRandomTile();
-    this.updateGridTile();
+    this.updateView();
   }
 
   public resetGame() {
-    // this._table = this._table.map((row) => row.map(() => 0));
-    // this.addRandomTile();
-    // this.updateGridTile();
-    // cc.tween(this._tiles[2])
-    //   .to(1, { position: cc.v3(100, 100) })
-    //   .start();
+    this._table = this._table.map((row) => row.map(() => 0));
+    this.addRandomTile();
+    this.updateView();
+    
+    this._score = 0;
+    this.scoreLabel.string = this._score.toString();
+
+    this.loseScreen.active = false;
   }
 
   // update (dt) {}
 }
+
+// class Tile {
+
+//   private _node : cc.Node = null;
+//   private _tier : number = 0;
+  
+//   constructor(node: cc.Node) {
+//     this._node = node;
+//   }
+
+//   get node() {
+//     return this._node;
+//   }
+
+//   set node(val : cc.Node) {
+//     this._node = val;
+//   }
+
+//   public enable() {
+//     this._node.active = true;
+//   }
+
+//   public disable() {
+//     this._node.active = false;
+//   }
+
+//   public updateValue(value : number) {
+//     if (value === 0) {
+//       this.disable();
+//     } else {
+//       this._node.children[0].children[0].getComponent(cc.Label).string = value.toString();
+//     }
+//   }
+
+//   public tierUp() {
+//     this._tier++;
+//   }
+// }
